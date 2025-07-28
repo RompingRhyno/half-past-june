@@ -1,0 +1,55 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Product {
+  id           String           @id @default(cuid())
+  name         String
+  slug         String           @unique           // used for clean URLs and storage paths
+  description  String?
+  makeToOrder  Boolean          @default(true)    // determines stock model
+  images       Image[]
+  variants     ProductVariant[]
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+}
+
+model ProductVariant {
+  id          String         @id @default(cuid())
+  colour      String
+  colourCode  String?        // HEX or RGB color string
+  price       Float
+  stock       Int?           // null if stock is per-size
+  product     Product        @relation(fields: [productId], references: [id])
+  productId   String
+  sizes       VariantSize[]
+}
+
+model VariantSize {
+  id             String           @id @default(cuid())
+  size           String           // e.g., "S", "M", "L"
+  stock          Int?             // specific stock per size
+  productVariant ProductVariant   @relation(fields: [variantId], references: [id])
+  variantId      String
+}
+
+model Image {
+  id         String   @id @default(cuid())
+  basename   String   // e.g., "1721851217640_MyPhoto"
+  extension  String   // e.g., "jpg"
+  product    Product  @relation(fields: [productId], references: [id])
+  productId  String
+}
