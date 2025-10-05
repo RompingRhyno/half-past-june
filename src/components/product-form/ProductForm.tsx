@@ -3,29 +3,13 @@
 import React, { useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 import dynamic from "next/dynamic";
-import ProductVariants from "@/components/product-form/ProductVariants";
+import ProductVariants from "./ProductVariants";
+import { Size, Variant } from "./productVariants.types";
+import { PRESET_SIZES } from "@/lib/productSizes";
 import { toast } from "sonner";
 import { slugify } from "@/lib/slugify";
 
 const CKEditorApp = dynamic(() => import("@/components/ckeditor/App"), { ssr: false });
-
-export const PRESET_SIZES = ["XXS", "XS", "S", "M", "L", "XL", "XXL"];
-
-export type Size = {
-  size: string;
-  enabled: boolean;
-  stock: string;
-};
-
-export type Variant = {
-  id: string;
-  colour: string;
-  colourCode: string;
-  price: string;
-  stock: string;
-  showColorPicker: boolean;
-  sizes: Size[];
-};
 
 export type InitialValues = {
   name: string;
@@ -41,41 +25,13 @@ type Props = {
   initialValues?: InitialValues;
 };
 
-/**
- * Normalizes a product object from the database into `InitialValues` suitable for the form
- */
-export function mapProductToInitialValues(product: any): InitialValues {
-  return {
-    name: product.name,
-    slug: product.slug,
-    description: product.description,
-    makeToOrder: product.makeToOrder,
-    variants: (product.variants || []).map((v: any) => ({
-      id: v.id || uuidv4(),
-      colour: v.colour || "",
-      colourCode: v.colourCode || "#ffffff",
-      price: String(v.price ?? ""),
-      stock: String(v.stock ?? ""),
-      showColorPicker: false,
-      sizes: PRESET_SIZES.map((size) => {
-        const match = v.sizes?.find?.((s: any) => s.size === size);
-        return {
-          size,
-          enabled: !!match,
-          stock: String(match?.stock ?? ""),
-        };
-      }),
-    })),
-  };
-}
-
 export default function ProductForm({ action, mode, initialValues }: Props) {
+  // Initialize state from provided initialValues or defaults
   const [productName, setProductName] = useState(initialValues?.name ?? "");
   const [description, setDescription] = useState(initialValues?.description ?? "");
   const [makeToOrder, setMakeToOrder] = useState(initialValues?.makeToOrder ?? true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Variants are already normalized via initialValues
   const [variants, setVariants] = useState<Variant[]>(() => {
     if (!initialValues?.variants || mode === "create") {
       return [
@@ -111,14 +67,14 @@ export default function ProductForm({ action, mode, initialValues }: Props) {
   const handleRemoveVariant = (id: string) => {
     setVariants((prev) => {
       const index = prev.findIndex((v) => v.id === id);
-      if (index <= 0) return prev; // prevent removing the first variant
+      if (index <= 0) return prev; // never remove first variant
       return prev.filter((v, i) => i !== index);
     });
   };
 
   const handleVariantChange = (
     id: string,
-    field: string,
+    field: keyof Variant,
     value: string | boolean | Size[]
   ) => {
     setVariants((prev) =>
@@ -131,8 +87,7 @@ export default function ProductForm({ action, mode, initialValues }: Props) {
   const validateForm = () => {
     if (!productName.trim()) return "Product name is required";
     if (variants.some((v) => !v.colour)) return "All variants need a color";
-    if (variants.some((v) => isNaN(parseFloat(v.price))))
-      return "All variants need a valid price";
+    if (variants.some((v) => isNaN(parseFloat(v.price)))) return "All variants need a valid price";
     return null;
   };
 
@@ -147,8 +102,7 @@ export default function ProductForm({ action, mode, initialValues }: Props) {
 
     setIsSubmitting(true);
 
-    const finalSlug =
-      mode === "create" ? slugify(productName) : initialValues?.slug ?? slugify(productName);
+    const finalSlug = mode === "create" ? slugify(productName) : initialValues?.slug ?? slugify(productName);
 
     try {
       const formData = new FormData();
@@ -162,12 +116,12 @@ export default function ProductForm({ action, mode, initialValues }: Props) {
           variants.map(({ id, showColorPicker, ...rest }) => ({
             ...rest,
             price: parseFloat(rest.price),
-            stock: rest.stock ? parseInt(rest.stock) : null,
+            stock: makeToOrder ? parseInt(rest.stock || "0") : null,
             sizes: rest.sizes
               .filter((s) => s.enabled)
               .map((s) => ({
                 size: s.size,
-                stock: makeToOrder ? null : parseInt(s.stock),
+                stock: makeToOrder ? null : parseInt(s.stock || "0"),
               })),
           }))
         )
@@ -234,36 +188,7 @@ export default function ProductForm({ action, mode, initialValues }: Props) {
             isSubmitting ? "opacity-50 cursor-not-allowed" : ""
           }`}
         >
-          {isSubmitting ? (
-            <span className="flex items-center justify-center">
-              <svg
-                className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                />
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 
-                  1.135 5.824 3 7.938l3-2.647z"
-                />
-              </svg>
-              {mode === "create" ? "Creating..." : "Saving..."}
-            </span>
-          ) : mode === "create" ? (
-            "Create Product"
-          ) : (
-            "Save Changes"
-          )}
+          {isSubmitting ? "Saving..." : mode === "create" ? "Create Product" : "Save Changes"}
         </button>
       </form>
     </div>

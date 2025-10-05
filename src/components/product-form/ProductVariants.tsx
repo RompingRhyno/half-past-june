@@ -3,29 +3,20 @@
 import React from "react";
 import { X } from "lucide-react";
 import { HexColorPicker } from "react-colorful";
+import type { Variant, Size } from "./productVariants.types";
 
-interface Size {
-  size: string;
-  enabled: boolean;
-  stock: string;
-}
-
-interface Variant {
-  id: string;
-  colour: string;
-  colourCode: string;
-  price: string;
-  stock: string;
-  showColorPicker: boolean;
-  sizes: Size[];
-}
+type EditableVariantField = "colour" | "colourCode" | "price" | "stock" | "sizes" | "showColorPicker";
 
 interface ProductVariantsProps {
   variants: Variant[];
   makeToOrder: boolean;
   onAddVariant: () => void;
   onRemoveVariant: (id: string) => void;
-  onVariantChange: (id: string, field: string, value: string | boolean | Size[]) => void;
+  onVariantChange: <K extends EditableVariantField>(
+    id: string,
+    field: K,
+    value: Variant[K]
+  ) => void;
 }
 
 export default function ProductVariants({

@@ -1,16 +1,16 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import ProductForm, { mapProductToInitialValues } from "@/components/product-form/ProductForm";
+import ProductForm from "@/components/product-form/ProductForm";
 import ProductImages from "@/components/product-form/ProductImages";
+import { mapProductToInitialValues } from "@/lib/mapProductToInitialValues";
 import { updateProductAction } from "@/actions/updateProduct";
 
 interface PageProps {
-  params: Promise<{ slug: string }>;
+    params: { slug: string };
 }
 
 export default async function EditProductPage({ params }: PageProps) {
-  const awaitedParams = await params;
-  const slug = awaitedParams.slug;
+  const slug = params.slug;
 
   const product = await prisma.product.findUnique({
     where: { slug },
