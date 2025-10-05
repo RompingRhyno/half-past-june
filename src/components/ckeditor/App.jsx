@@ -60,7 +60,7 @@ import './App.css';
  */
 const LICENSE_KEY = 'GPL'; // or <YOUR_LICENSE_KEY>.
 
-export default function App({ onChange }) {
+export default function App({ onChange, data = '' }) {
 	const editorContainerRef = useRef(null);
 	const editorRef = useRef(null);
 	const [isLayoutReady, setIsLayoutReady] = useState(false);
@@ -307,7 +307,7 @@ export default function App({ onChange }) {
 				}
 			}
 		};
-	}, [isLayoutReady]);
+	}, [isLayoutReady, data]);
 
 	return (
     <div className="main-container">

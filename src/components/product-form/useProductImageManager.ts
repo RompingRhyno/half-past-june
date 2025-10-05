@@ -8,7 +8,7 @@ import {
   getResizedPaths,
   getPreviewPath,
 } from "@/lib/imagePaths";
-import { UploadableImage } from "./ProductImages.types";
+import { UploadableImage } from "./productImages.types";
 
 export type UploadStatus = "idle" | "uploading" | "processing" | "success" | "error";
 

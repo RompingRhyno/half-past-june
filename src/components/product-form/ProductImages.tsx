@@ -9,7 +9,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { X, RotateCcw } from "lucide-react";
-import { UploadableImage } from "./ProductImages.types";
+import { UploadableImage } from "./productImages.types";
 import { useProductImageManager } from "./useProductImageManager";
 import SortableImage from "./SortableImage";
 

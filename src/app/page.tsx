@@ -202,12 +202,6 @@ export default function Home() {
           erat convallis. Etiam at turpis nec purus pulvinar varius.
         </p>
       </section>
-
-      {/* Main page content placeholder */}
-      <main className="p-8">
-        <h1>Welcome to Half Past June</h1>
-        <p>This is your homepage content.</p>
-      </main>
     </>
   );
 }

@@ -4,7 +4,7 @@ import React from "react";
 import { X, RotateCcw } from "lucide-react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { UploadableImage } from "./ProductImages.types";
+import type { UploadableImage } from "./productImages.types";
 
 type SortableImageProps = {
   image: UploadableImage;
