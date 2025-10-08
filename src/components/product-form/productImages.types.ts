@@ -9,4 +9,15 @@ export type UploadableImage = {
   errorMessage?: string;
   id: string;
   isExisting?: boolean;
+  basename?: string;
+  extension?: string;
+  imageId?: string; // used for existing images in DB
+  order?: number;
+};
+
+export type ProcessedImageInfo = {
+  basename: string;
+  extension: string;
+  order: number;
+  id?: string;
 };

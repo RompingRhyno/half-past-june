@@ -102,7 +102,10 @@ export default function ProductForm({ action, mode, initialValues }: Props) {
 
     setIsSubmitting(true);
 
-    const finalSlug = mode === "create" ? slugify(productName) : initialValues?.slug ?? slugify(productName);
+    const finalSlug =
+      mode === "create"
+        ? slugify(productName)
+        : initialValues?.slug ?? slugify(productName);
 
     try {
       const formData = new FormData();
@@ -129,13 +132,27 @@ export default function ProductForm({ action, mode, initialValues }: Props) {
       formData.append("images", "[]");
 
       await action(formData);
-    } catch (error) {
-      toast.error("An unexpected error occurred", { id: "product-form", duration: 5000 });
+
+      if (mode === "edit") {
+        // Stay on page, show success feedback
+        toast.success("Changes saved successfully!");
+      }
+
+    } catch (error: any) {
+      // Ignore redirect errors triggered by Next.js
+      if (error?.digest?.startsWith("NEXT_REDIRECT")) return;
+
+      toast.error("An unexpected error occurred", {
+        id: "product-form",
+        duration: 5000,
+      });
       console.error("Form submission error:", error);
+
     } finally {
       setIsSubmitting(false);
     }
   };
+
 
   return (
     <div className="space-y-6">
@@ -153,7 +170,11 @@ export default function ProductForm({ action, mode, initialValues }: Props) {
 
         <div>
           <label className="block font-medium mb-1">Product Description</label>
-          <CKEditorApp onChange={(data: string) => setDescription(data)} data={description} />
+          <CKEditorApp
+            key={initialValues?.slug ?? "new"}   // forces remount on edit pages
+            onChange={(data: string) => setDescription(data)}
+            data={description}
+          />
         </div>
 
         <div>
@@ -161,14 +182,12 @@ export default function ProductForm({ action, mode, initialValues }: Props) {
           <button
             type="button"
             onClick={() => setMakeToOrder((prev) => !prev)}
-            className={`w-12 h-6 flex items-center rounded-full p-1 transition-colors duration-300 ${
-              makeToOrder ? "bg-green-500" : "bg-gray-300"
-            }`}
+            className={`w-12 h-6 flex items-center rounded-full p-1 transition-colors duration-300 ${makeToOrder ? "bg-green-500" : "bg-gray-300"
+              }`}
           >
             <div
-              className={`bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ease-in-out ${
-                makeToOrder ? "translate-x-6" : "translate-x-0"
-              }`}
+              className={`bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ease-in-out ${makeToOrder ? "translate-x-6" : "translate-x-0"
+                }`}
             />
           </button>
         </div>
@@ -184,9 +203,8 @@ export default function ProductForm({ action, mode, initialValues }: Props) {
         <button
           type="submit"
           disabled={isSubmitting}
-          className={`bg-blue-600 text-white rounded px-5 py-2 hover:bg-blue-700 ${
-            isSubmitting ? "opacity-50 cursor-not-allowed" : ""
-          }`}
+          className={`bg-blue-600 text-white rounded px-5 py-2 hover:bg-blue-700 ${isSubmitting ? "opacity-50 cursor-not-allowed" : ""
+            }`}
         >
           {isSubmitting ? "Saving..." : mode === "create" ? "Create Product" : "Save Changes"}
         </button>

@@ -1,6 +1,5 @@
 const BASE_BUCKET = "product-images"; // Supabase storage bucket
-const TARGET_WIDTHS = [720, 1080, 1512];
-
+export const TARGET_WIDTHS = [720, 900, 1080, 1296, 1512, 1728, 2048];
 
 export function getOriginalPath(slug: string, basename: string, ext: string): string;
 export function getOriginalPath(slug: string, filename: string): string;

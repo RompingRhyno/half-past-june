@@ -50,6 +50,7 @@ model Image {
   id         String   @id @default(cuid())
   basename   String   // e.g., "1721851217640_MyPhoto"
   extension  String   // e.g., "jpg"
+  order      Int      @default(0)
   product    Product  @relation(fields: [productId], references: [id])
   productId  String
 }

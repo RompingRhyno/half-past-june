@@ -4,12 +4,9 @@ import React from "react";
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import {
   SortableContext,
-  useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import { X, RotateCcw } from "lucide-react";
-import { UploadableImage } from "./productImages.types";
+import { ProcessedImageInfo } from "./productImages.types";
 import { useProductImageManager } from "./useProductImageManager";
 import SortableImage from "./SortableImage";
 
@@ -20,7 +17,7 @@ type ProductImagesProps = {
     basename: string;
     extension: string;
   }[];
-  onProcessedChange?: (processedImages: UploadableImage[]) => void;
+  onProcessedChange?: (processed: ProcessedImageInfo[]) => void; // <--- match hook type
 };
 
 export default function ProductImages({ slug, existingImages = [], onProcessedChange }: ProductImagesProps) {

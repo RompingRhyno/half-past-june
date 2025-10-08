@@ -6,11 +6,11 @@ import { mapProductToInitialValues } from "@/lib/mapProductToInitialValues";
 import { updateProductAction } from "@/actions/updateProduct";
 
 interface PageProps {
-    params: { slug: string };
+  params: Promise<{ slug: string }>;
 }
 
 export default async function EditProductPage({ params }: PageProps) {
-  const slug = params.slug;
+  const { slug } = await params;
 
   const product = await prisma.product.findUnique({
     where: { slug },
