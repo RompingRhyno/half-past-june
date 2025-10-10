@@ -4,17 +4,45 @@ import { toast } from "sonner";
 /** Assign sparse order values (gap = 10) */
 export const getSparseOrder = (idx: number) => (idx + 1) * 10;
 
-/** Rebalance orders to avoid collisions */
+/** Rebalance orders to avoid collisions, keeping gap = 10 when possible */
 export const rebalanceOrders = (imgs: UploadableImage[]): UploadableImage[] => {
   const next = [...imgs];
   let prevOrder = 0;
+
   for (let i = 0; i < next.length; i++) {
     const img = next[i];
+    // If order is missing or less/equal to previous, assign sparse order
     if (!img.order || img.order <= prevOrder) img.order = prevOrder + 10;
     prevOrder = img.order;
   }
+
   return next;
 };
+
+/** Reorder images using sparse ordering and midpoint logic */
+export const reorderAndRebalance = (
+  imgs: UploadableImage[],
+  oldIndex: number,
+  newIndex: number
+): UploadableImage[] => {
+  const reordered = [...imgs];
+  const [moved] = reordered.splice(oldIndex, 1);
+  reordered.splice(newIndex, 0, moved);
+
+  // Compute sparse order for moved image
+  const prevOrder = reordered[newIndex - 1]?.order ?? 0;
+  const nextOrder = reordered[newIndex + 1]?.order ?? prevOrder + 20;
+  moved.order = prevOrder + Math.floor((nextOrder - prevOrder) / 2);
+
+  // Check for collisions (neighbor orders not strictly increasing)
+  const collision = reordered.some((img, idx) => {
+    if (idx === 0) return false;
+    return reordered[idx].order! <= reordered[idx - 1].order!;
+  });
+
+  return collision ? rebalanceOrders(reordered) : reordered;
+};
+
 
 /** Create DB row for a new image with prepended timestamp for uniqueness */
 export async function createImageDbRow(
@@ -32,13 +60,13 @@ export async function createImageDbRow(
       method: "POST",
       body: JSON.stringify({
         slug,
-        basename: basenameWithTimestamp, // includes timestamp in basename
+        basename: basenameWithTimestamp,
         extension,
         order,
       }),
     });
     if (!res.ok) throw new Error("Failed to create image DB row");
-    
+
     const data = await res.json();
     return {
       id: data.id,
@@ -50,7 +78,6 @@ export async function createImageDbRow(
     throw new Error("DB row creation failed");
   }
 }
-
 
 /**
  * Deletes all storage files for an image (original + resized variants),

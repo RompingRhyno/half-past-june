@@ -1,82 +1,144 @@
 "use client";
 
-import React from "react";
-import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
+import React, { useCallback, useMemo, forwardRef, useImperativeHandle } from "react";
 import {
-  SortableContext,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { ProcessedImageInfo } from "./productImages.types";
 import { useProductImageManager } from "./useProductImageManager";
 import SortableImage from "./SortableImage";
+import { UploadableImage } from "./productImages.types";
+
+export type ProductImagesHandle = {
+  uploadAll: () => Promise<void>;
+};
+
+export type ExistingImage = {
+  id: string;
+  basename: string;
+  extension: string;
+};
 
 type ProductImagesProps = {
   slug: string;
-  existingImages?: {
-    id: string;
-    basename: string;
-    extension: string;
-  }[];
-  onProcessedChange?: (processed: ProcessedImageInfo[]) => void; // <--- match hook type
+  existingImages?: ExistingImage[];
+  onProcessedChange?: (processed: ProcessedImageInfo[]) => void;
+  onOrderChange?: (orderedImages: ProcessedImageInfo[]) => void;
 };
 
-export default function ProductImages({ slug, existingImages = [], onProcessedChange }: ProductImagesProps) {
-  const sensors = useSensors(useSensor(PointerSensor));
+const ProductImages = forwardRef<ProductImagesHandle, ProductImagesProps>(
+  ({ slug, existingImages = [], onProcessedChange, onOrderChange }, ref) => {
+    const sensors = useSensors(useSensor(PointerSensor));
 
-  const {
-    images,
-    handleAddFiles,
-    handleRemove,
-    handleRetry,
-    handleReorder,
-  } = useProductImageManager(slug, existingImages, onProcessedChange);
+    const {
+      images,
+      handleAddFiles,
+      handleRemove,
+      handleRetry,
+      handleReorder,
+      handleUploadAll,
+    } = useProductImageManager(slug, existingImages, onProcessedChange);
 
-  // Convert input change event to file array and call handleAddFiles
-  const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files) return;
-    const filesArray = Array.from(e.target.files);
-    handleAddFiles(filesArray);
-    e.target.value = ""; // clear input so same file can be re-uploaded
-  };
+    const reorderAndNotify = useCallback(
+      (oldIndex: number, newIndex: number) => {
+        const reordered: UploadableImage[] = handleReorder(oldIndex, newIndex);
+        if (!onOrderChange) return;
 
-  // Map dnd-kit onDragEnd to handleReorder
-  const onDragEnd = (event: any) => {
-    const { active, over } = event;
-    if (active.id !== over?.id) {
-      const oldIndex = images.findIndex((img) => img.id === active.id);
-      const newIndex = images.findIndex((img) => img.id === over?.id);
-      if (oldIndex >= 0 && newIndex >= 0) {
-        handleReorder(oldIndex, newIndex);
-      }
-    }
-  };
+        // Convert to ProcessedImageInfo[] only include images that are processed
+        const processedOrdered = reordered
+          .filter(
+            (img) =>
+              img.status === "success" &&
+              typeof img.basename === "string" &&
+              typeof img.extension === "string" &&
+              typeof img.order === "number"
+          )
+          .map((img) => ({
+            basename: img.basename!,
+            extension: img.extension!,
+            order: img.order!,
+            id: img.imageId,
+          }));
 
-  return (
-    <div className="space-y-2">
-      <label className="block text-sm font-medium">Images</label>
-      <input
-        type="file"
-        accept="image/*"
-        multiple
-        onChange={onFileChange}
-        className="block w-full text-sm border border-gray-300 rounded p-2"
-      />
+        onOrderChange(processedOrdered);
+      },
+      [handleReorder, onOrderChange]
+    );
 
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-        <SortableContext items={images.map((img) => img.id)} strategy={verticalListSortingStrategy}>
-          <div className="flex gap-2 flex-wrap">
-            {images.map((img, index) => (
-              <SortableImage
-                key={img.id}
-                image={img}
-                index={index}
-                onRemove={handleRemove}
-                onRetry={handleRetry}
-              />
-            ))}
-          </div>
-        </SortableContext>
-      </DndContext>
-    </div>
-  );
-}
+    // Expose uploadAll to parent via ref
+    useImperativeHandle(
+      ref,
+      () => ({
+        uploadAll: handleUploadAll,
+      }),
+      [handleUploadAll]
+    );
+
+    const onFileChange = useCallback(
+      (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!e.target.files) return;
+        const filesArray = Array.from(e.target.files);
+        handleAddFiles(filesArray);
+        e.target.value = ""; // allow re-upload of the same file
+      },
+      [handleAddFiles]
+    );
+
+    const onDragEnd = useCallback(
+      (event: DragEndEvent) => {
+        const { active, over } = event;
+        if (!over || active.id === over.id) return;
+
+        const oldIndex = images.findIndex((img) => img.id === active.id);
+        const newIndex = images.findIndex((img) => img.id === over.id);
+        if (oldIndex >= 0 && newIndex >= 0) reorderAndNotify(oldIndex, newIndex);
+      },
+      [images, reorderAndNotify]
+    );
+
+    const imageIds = useMemo(() => images.map((img) => img.id), [images]);
+
+    return (
+      <div className="space-y-2">
+        <label className="block font-medium mb-1" htmlFor="product-images-input">
+          Images
+        </label>
+        <input
+          id="product-images-input"
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={onFileChange}
+          className="block w-full text-sm border border-gray-300 rounded p-2"
+          aria-label="Upload product images"
+        />
+
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+          <SortableContext items={imageIds} strategy={verticalListSortingStrategy}>
+            <div className="flex gap-2 flex-wrap">
+              {images.map((img, index) => (
+                <SortableImage
+                  key={img.id}
+                  image={img}
+                  index={index}
+                  onRemove={handleRemove}
+                  onRetry={handleRetry}
+                />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
+      </div>
+    );
+  }
+);
+
+ProductImages.displayName = "ProductImages";
+
+export default ProductImages;

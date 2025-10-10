@@ -12,7 +12,7 @@ export type UploadableImage = {
   basename?: string;
   extension?: string;
   imageId?: string; // used for existing images in DB
-  order?: number;
+  order: number;
 };
 
 export type ProcessedImageInfo = {

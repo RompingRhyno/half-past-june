@@ -1,12 +1,11 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, forwardRef, useImperativeHandle } from "react";
 import { v4 as uuidv4 } from "uuid";
 import dynamic from "next/dynamic";
 import ProductVariants from "./ProductVariants";
 import { Size, Variant } from "./productVariants.types";
 import { PRESET_SIZES } from "@/lib/productSizes";
-import { toast } from "sonner";
 import { slugify } from "@/lib/slugify";
 
 const CKEditorApp = dynamic(() => import("@/components/ckeditor/App"), { ssr: false });
@@ -23,18 +22,43 @@ type Props = {
   action: (formData: FormData) => Promise<void>;
   mode: "create" | "edit";
   initialValues?: InitialValues;
+  onNameChange?: (name: string) => void; // callback to update floating header
 };
 
-export default function ProductForm({ action, mode, initialValues }: Props) {
-  // Initialize state from provided initialValues or defaults
-  const [productName, setProductName] = useState(initialValues?.name ?? "");
-  const [description, setDescription] = useState(initialValues?.description ?? "");
-  const [makeToOrder, setMakeToOrder] = useState(initialValues?.makeToOrder ?? true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+export type ProductFormHandle = {
+  submitForm: () => Promise<string | null>; // return error message or null
+};
 
-  const [variants, setVariants] = useState<Variant[]>(() => {
-    if (!initialValues?.variants || mode === "create") {
-      return [
+const ProductForm = forwardRef<ProductFormHandle, Props>(
+  ({ action, mode, initialValues, onNameChange }, ref) => {
+    const [productName, setProductName] = useState(initialValues?.name ?? "");
+    const [slug, setSlug] = useState(
+      initialValues?.slug ?? slugify(initialValues?.name ?? "")
+    );
+    const [description, setDescription] = useState(initialValues?.description ?? "");
+    const [makeToOrder, setMakeToOrder] = useState(initialValues?.makeToOrder ?? true);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const [variants, setVariants] = useState<Variant[]>(() => {
+      if (!initialValues?.variants || mode === "create") {
+        return [
+          {
+            id: uuidv4(),
+            colour: "",
+            colourCode: "#ffffff",
+            price: "",
+            stock: "",
+            showColorPicker: false,
+            sizes: PRESET_SIZES.map((size) => ({ size, enabled: false, stock: "" })),
+          },
+        ];
+      }
+      return initialValues.variants;
+    });
+
+    const handleAddVariant = () => {
+      setVariants((prev) => [
+        ...prev,
         {
           id: uuidv4(),
           colour: "",
@@ -44,125 +68,103 @@ export default function ProductForm({ action, mode, initialValues }: Props) {
           showColorPicker: false,
           sizes: PRESET_SIZES.map((size) => ({ size, enabled: false, stock: "" })),
         },
-      ];
-    }
-    return initialValues.variants;
-  });
+      ]);
+    };
 
-  const handleAddVariant = () => {
-    setVariants((prev) => [
-      ...prev,
-      {
-        id: uuidv4(),
-        colour: "",
-        colourCode: "#ffffff",
-        price: "",
-        stock: "",
-        showColorPicker: false,
-        sizes: PRESET_SIZES.map((size) => ({ size, enabled: false, stock: "" })),
-      },
-    ]);
-  };
+    const handleRemoveVariant = (id: string) => {
+      setVariants((prev) => {
+        const index = prev.findIndex((v) => v.id === id);
+        if (index <= 0) return prev; // never remove first variant
+        return prev.filter((v, i) => i !== index);
+      });
+    };
 
-  const handleRemoveVariant = (id: string) => {
-    setVariants((prev) => {
-      const index = prev.findIndex((v) => v.id === id);
-      if (index <= 0) return prev; // never remove first variant
-      return prev.filter((v, i) => i !== index);
-    });
-  };
-
-  const handleVariantChange = (
-    id: string,
-    field: keyof Variant,
-    value: string | boolean | Size[]
-  ) => {
-    setVariants((prev) =>
-      prev.map((variant) =>
-        variant.id === id ? { ...variant, [field]: value } : variant
-      )
-    );
-  };
-
-  const validateForm = () => {
-    if (!productName.trim()) return "Product name is required";
-    if (variants.some((v) => !v.colour)) return "All variants need a color";
-    if (variants.some((v) => isNaN(parseFloat(v.price)))) return "All variants need a valid price";
-    return null;
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    const validationError = validateForm();
-    if (validationError) {
-      toast.error(validationError);
-      return;
-    }
-
-    setIsSubmitting(true);
-
-    const finalSlug =
-      mode === "create"
-        ? slugify(productName)
-        : initialValues?.slug ?? slugify(productName);
-
-    try {
-      const formData = new FormData();
-      formData.append("name", productName);
-      formData.append("slug", finalSlug);
-      formData.append("description", description);
-      formData.append("makeToOrder", String(makeToOrder));
-      formData.append(
-        "variants",
-        JSON.stringify(
-          variants.map(({ id, showColorPicker, ...rest }) => ({
-            ...rest,
-            price: parseFloat(rest.price),
-            stock: makeToOrder ? parseInt(rest.stock || "0") : null,
-            sizes: rest.sizes
-              .filter((s) => s.enabled)
-              .map((s) => ({
-                size: s.size,
-                stock: makeToOrder ? null : parseInt(s.stock || "0"),
-              })),
-          }))
+    const handleVariantChange = (
+      id: string,
+      field: keyof Variant,
+      value: string | boolean | Size[]
+    ) => {
+      setVariants((prev) =>
+        prev.map((variant) =>
+          variant.id === id ? { ...variant, [field]: value } : variant
         )
       );
-      formData.append("images", "[]");
+    };
 
-      await action(formData);
+    const validateForm = (): string | null => {
+      if (!productName.trim()) return "Product name is required";
+      if (variants.some((v) => !v.colour)) return "All variants need a color";
+      if (variants.some((v) => isNaN(parseFloat(v.price)))) return "All variants need a valid price";
+      return null;
+    };
 
-      if (mode === "edit") {
-        // Stay on page, show success feedback
-        toast.success("Changes saved successfully!");
+    const submitForm = async (): Promise<string | null> => {
+      const validationError = validateForm();
+      if (validationError) return validationError;
+
+      setIsSubmitting(true);
+
+      const finalSlug =
+        mode === "create"
+          ? slugify(productName)
+          : initialValues?.slug ?? slugify(productName);
+
+      try {
+        const formData = new FormData();
+        formData.append("name", productName);
+        formData.append("slug", finalSlug);
+        formData.append("description", description);
+        formData.append("makeToOrder", String(makeToOrder));
+        formData.append(
+          "variants",
+          JSON.stringify(
+            variants.map(({ id, showColorPicker, ...rest }) => ({
+              ...rest,
+              price: parseFloat(rest.price),
+              stock: makeToOrder ? parseInt(rest.stock || "0") : null,
+              sizes: rest.sizes
+                .filter((s) => s.enabled)
+                .map((s) => ({
+                  size: s.size,
+                  stock: makeToOrder ? null : parseInt(s.stock || "0"),
+                })),
+            }))
+          )
+        );
+        formData.append("images", "[]"); // Placeholder
+
+        await action(formData);
+        return null; // success
+      } catch (error: any) {
+        if (error?.digest?.startsWith("NEXT_REDIRECT")) return null;
+        console.error("Form submission error:", error);
+        return "An unexpected error occurred";
+      } finally {
+        setIsSubmitting(false);
       }
+    };
 
-    } catch (error: any) {
-      // Ignore redirect errors triggered by Next.js
-      if (error?.digest?.startsWith("NEXT_REDIRECT")) return;
+    // Expose submitForm via ref
+    useImperativeHandle(ref, () => ({
+      submitForm,
+    }));
 
-      toast.error("An unexpected error occurred", {
-        id: "product-form",
-        duration: 5000,
-      });
-      console.error("Form submission error:", error);
+    // Call onNameChange whenever productName updates
+    const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const newName = e.target.value;
+      setProductName(newName);
+      setSlug(slugify(newName));
+      onNameChange?.(newName);
+    };
 
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-
-  return (
-    <div className="space-y-6">
-      <form onSubmit={handleSubmit} className="space-y-6">
+    return (
+      <div className="space-y-6" id="product-form">
         <div>
           <label className="block font-medium mb-1">Product Name</label>
           <input
             type="text"
             value={productName}
-            onChange={(e) => setProductName(e.target.value)}
+            onChange={handleNameChange}
             required
             className="border rounded px-3 py-2 w-full"
           />
@@ -171,7 +173,7 @@ export default function ProductForm({ action, mode, initialValues }: Props) {
         <div>
           <label className="block font-medium mb-1">Product Description</label>
           <CKEditorApp
-            key={initialValues?.slug ?? "new"}   // forces remount on edit pages
+            key={initialValues?.slug ?? "new"}
             onChange={(data: string) => setDescription(data)}
             data={description}
           />
@@ -182,12 +184,14 @@ export default function ProductForm({ action, mode, initialValues }: Props) {
           <button
             type="button"
             onClick={() => setMakeToOrder((prev) => !prev)}
-            className={`w-12 h-6 flex items-center rounded-full p-1 transition-colors duration-300 ${makeToOrder ? "bg-green-500" : "bg-gray-300"
-              }`}
+            className={`w-12 h-6 flex items-center rounded-full p-1 transition-colors duration-300 ${
+              makeToOrder ? "bg-green-500" : "bg-gray-300"
+            }`}
           >
             <div
-              className={`bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ease-in-out ${makeToOrder ? "translate-x-6" : "translate-x-0"
-                }`}
+              className={`bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ease-in-out ${
+                makeToOrder ? "translate-x-6" : "translate-x-0"
+              }`}
             />
           </button>
         </div>
@@ -199,16 +203,11 @@ export default function ProductForm({ action, mode, initialValues }: Props) {
           onRemoveVariant={handleRemoveVariant}
           onVariantChange={handleVariantChange}
         />
+      </div>
+    );
+  }
+);
 
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className={`bg-blue-600 text-white rounded px-5 py-2 hover:bg-blue-700 ${isSubmitting ? "opacity-50 cursor-not-allowed" : ""
-            }`}
-        >
-          {isSubmitting ? "Saving..." : mode === "create" ? "Create Product" : "Save Changes"}
-        </button>
-      </form>
-    </div>
-  );
-}
+ProductForm.displayName = "ProductForm";
+
+export default ProductForm;
