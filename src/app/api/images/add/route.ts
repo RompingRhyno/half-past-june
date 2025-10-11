@@ -3,15 +3,15 @@ import { prisma } from "@/lib/prisma";
 
 export async function POST(req: Request) {
   try {
-    const { slug, basename, extension, order } = await req.json();
+    const { productId, basename, extension, order } = await req.json();
 
-    if (!slug || !basename || !extension) {
+    if (!productId || !basename || !extension) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
     const newImage = await prisma.image.create({
       data: {
-        product: { connect: { slug } },
+        product: { connect: { id: productId } },
         basename,
         extension,
         order,

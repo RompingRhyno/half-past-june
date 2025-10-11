@@ -18,7 +18,7 @@ datasource db {
 model Product {
   id           String           @id @default(cuid())
   name         String
-  slug         String           @unique           // used for clean URLs and storage paths
+  slug         String           @unique
   description  String?
   makeToOrder  Boolean          @default(true)    // determines stock model
   images       Image[]

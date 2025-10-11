@@ -10,10 +10,9 @@ import {
   DragEndEvent,
 } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { ProcessedImageInfo } from "./productImages.types";
+import { ProcessedImageInfo, UploadableImage } from "./productImages.types";
 import { useProductImageManager } from "./useProductImageManager";
 import SortableImage from "./SortableImage";
-import { UploadableImage } from "./productImages.types";
 
 export type ProductImagesHandle = {
   uploadAll: () => Promise<void>;
@@ -23,17 +22,18 @@ export type ExistingImage = {
   id: string;
   basename: string;
   extension: string;
+  order?: number;
 };
 
 type ProductImagesProps = {
-  slug: string;
+  productId: string;
   existingImages?: ExistingImage[];
   onProcessedChange?: (processed: ProcessedImageInfo[]) => void;
   onOrderChange?: (orderedImages: ProcessedImageInfo[]) => void;
 };
 
 const ProductImages = forwardRef<ProductImagesHandle, ProductImagesProps>(
-  ({ slug, existingImages = [], onProcessedChange, onOrderChange }, ref) => {
+  ({ productId, existingImages = [], onProcessedChange, onOrderChange }, ref) => {
     const sensors = useSensors(useSensor(PointerSensor));
 
     const {
@@ -43,27 +43,27 @@ const ProductImages = forwardRef<ProductImagesHandle, ProductImagesProps>(
       handleRetry,
       handleReorder,
       handleUploadAll,
-    } = useProductImageManager(slug, existingImages, onProcessedChange);
+    } = useProductImageManager(productId, existingImages, onProcessedChange);
 
     const reorderAndNotify = useCallback(
       (oldIndex: number, newIndex: number) => {
         const reordered: UploadableImage[] = handleReorder(oldIndex, newIndex);
         if (!onOrderChange) return;
 
-        // Convert to ProcessedImageInfo[] only include images that are processed
+        // Only include images that are processed (uploaded successfully)
         const processedOrdered = reordered
           .filter(
             (img) =>
               img.status === "success" &&
-              typeof img.basename === "string" &&
-              typeof img.extension === "string" &&
+              img.basename &&
+              img.extension &&
               typeof img.order === "number"
           )
           .map((img) => ({
+            id: img.imageId,
             basename: img.basename!,
             extension: img.extension!,
             order: img.order!,
-            id: img.imageId,
           }));
 
         onOrderChange(processedOrdered);
@@ -85,7 +85,7 @@ const ProductImages = forwardRef<ProductImagesHandle, ProductImagesProps>(
         if (!e.target.files) return;
         const filesArray = Array.from(e.target.files);
         handleAddFiles(filesArray);
-        e.target.value = ""; // allow re-upload of the same file
+        e.target.value = ""; // reset input
       },
       [handleAddFiles]
     );
@@ -119,7 +119,11 @@ const ProductImages = forwardRef<ProductImagesHandle, ProductImagesProps>(
           aria-label="Upload product images"
         />
 
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={onDragEnd}
+        >
           <SortableContext items={imageIds} strategy={verticalListSortingStrategy}>
             <div className="flex gap-2 flex-wrap">
               {images.map((img, index) => (

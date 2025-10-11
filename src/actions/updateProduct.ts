@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { redirect } from "next/navigation";
+import { slugify } from "@/lib/slugify";
 
 interface ProductSizeInput {
   id?: string;
@@ -39,14 +39,16 @@ export async function updateProduct(data: UpdateProductInput) {
   }
 
   const makeToOrder = data.makeToOrder ?? true;
+  const newSlug = slugify(data.name); // generate new slug from updated name
 
   try {
     await prisma.$transaction(async (tx) => {
-      // Update product core fields
+      // Update product core fields including new slug
       await tx.product.update({
         where: { id: product.id },
         data: {
           name: data.name,
+          slug: newSlug,
           description: data.description,
           makeToOrder,
         },
@@ -150,17 +152,21 @@ export async function updateProduct(data: UpdateProductInput) {
       error instanceof Error ? error.message : "Failed to update product"
     );
   }
+
+  // Return the new slug so the frontend can redirect or update the URL
+  return newSlug;
 }
 
 export async function updateProductAction(formData: FormData) {
   const slug = formData.get("slug") as string;
 
-  await updateProduct({
+  const newSlug = await updateProduct({
     name: formData.get("name") as string,
     slug,
     description: formData.get("description") as string,
     makeToOrder: formData.get("makeToOrder") === "true",
     variants: JSON.parse(formData.get("variants") as string),
   });
-  console.log("updateProductAction finished successfully");
+
+  console.log("updateProductAction finished successfully, new slug:", newSlug);
 }

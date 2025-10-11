@@ -28,7 +28,7 @@ export default async function EditProductPage(props: PageProps) {
       mode="edit"
       formAction={updateProductAction}
       initialValues={initialValues}
-      slug={slug}
+      productId={product.id}
       existingImages={product.images}
     />
   );

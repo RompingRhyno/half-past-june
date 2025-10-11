@@ -29,12 +29,10 @@ export const reorderAndRebalance = (
   const [moved] = reordered.splice(oldIndex, 1);
   reordered.splice(newIndex, 0, moved);
 
-  // Compute sparse order for moved image
   const prevOrder = reordered[newIndex - 1]?.order ?? 0;
   const nextOrder = reordered[newIndex + 1]?.order ?? prevOrder + 20;
   moved.order = prevOrder + Math.floor((nextOrder - prevOrder) / 2);
 
-  // Check for collisions (neighbor orders not strictly increasing)
   const collision = reordered.some((img, idx) => {
     if (idx === 0) return false;
     return reordered[idx].order! <= reordered[idx - 1].order!;
@@ -43,11 +41,10 @@ export const reorderAndRebalance = (
   return collision ? rebalanceOrders(reordered) : reordered;
 };
 
-
-/** Create DB row for a new image with prepended timestamp for uniqueness */
+/** Create DB row for a new image using productId (instead of slug) */
 export async function createImageDbRow(
   file: File,
-  slug: string,
+  productId: string,
   order: number
 ): Promise<{ id: string; basename: string; extension: string }> {
   const timestamp = Date.now();
@@ -59,12 +56,13 @@ export async function createImageDbRow(
     const res = await fetch("/api/images/add", {
       method: "POST",
       body: JSON.stringify({
-        slug,
+        productId,
         basename: basenameWithTimestamp,
         extension,
         order,
       }),
     });
+
     if (!res.ok) throw new Error("Failed to create image DB row");
 
     const data = await res.json();

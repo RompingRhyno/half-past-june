@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { BASE_BUCKET } from "@/lib/imagePaths";
 
 export async function POST(req: Request) {
   try {
@@ -16,9 +17,8 @@ export async function POST(req: Request) {
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
     const admin = createClient(supabaseUrl, serviceRoleKey);
 
-    // Generate signed upload URL valid for 5 minutes
     const { data, error } = await admin.storage
-      .from("product-images")
+      .from(BASE_BUCKET)
       .createSignedUploadUrl(path, { upsert: true });
 
     if (error) {

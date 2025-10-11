@@ -1,25 +1,42 @@
-const BASE_BUCKET = "product-images"; // Supabase storage bucket
+export const BASE_BUCKET = "product-images"; // Supabase storage bucket
 export const TARGET_WIDTHS = [720, 900, 1080, 1296, 1512, 1728, 2048];
 
-export function getOriginalPath(slug: string, basename: string, ext: string): string;
-export function getOriginalPath(slug: string, filename: string): string;
-export function getOriginalPath(slug: string, namePart: string, ext?: string): string {
+/**
+ * Generate path for the original uploaded image.
+ * Examples:
+ *   getOriginalPath("123", "abc", "jpg") → "123/original/abc.jpg"
+ *   getOriginalPath("123", "abc.jpg")   → "123/original/abc.jpg"
+ */
+export function getOriginalPath(productId: string, basename: string, ext: string): string;
+export function getOriginalPath(productId: string, filename: string): string;
+export function getOriginalPath(productId: string, namePart: string, ext?: string): string {
   if (ext !== undefined) {
-    return `${slug}/original/${namePart}.${ext}`;
+    return `${productId}/original/${namePart}.${ext}`;
   }
-  return `${slug}/original/${namePart}`;
+  return `${productId}/original/${namePart}`;
 }
 
+/**
+ * Generate all resized variant paths (for responsive images).
+ * Example:
+ *   getResizedPaths("123", "abc", "jpg") →
+ *     ["123/resized/abc_720x.jpg", "123/resized/abc_900x.jpg", ...]
+ */
 export function getResizedPaths(
-  slug: string,
+  productId: string,
   basename: string,
   ext: string
 ): string[] {
   return TARGET_WIDTHS.map((width) => 
-    `${slug}/resized/${basename}_${width}x.${ext}`
+    `${productId}/resized/${basename}_${width}x.${ext}`
   );
 }
 
-export function getPreviewPath(slug: string, basename: string, ext: string): string {
-  return `${slug}/resized/${basename}_720x.${ext}`;
+/**
+ * Generate path for the default preview image (720px version).
+ * Example:
+ *   getPreviewPath("123", "abc", "jpg") → "123/resized/abc_720x.jpg"
+ */
+export function getPreviewPath(productId: string, basename: string, ext: string): string {
+  return `${productId}/resized/${basename}_720x.${ext}`;
 }

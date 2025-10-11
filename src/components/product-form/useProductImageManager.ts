@@ -1,7 +1,13 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { arrayMoveImmutable } from "array-move";
 import { resizeImage } from "@/lib/imageResize";
-import { getOriginalPath, getResizedPaths, getPreviewPath } from "@/lib/imagePaths";
+import {
+  getOriginalPath,
+  getResizedPaths,
+  getPreviewPath,
+  BASE_BUCKET,
+  TARGET_WIDTHS,
+} from "@/lib/imagePaths";
 import { getSignedUploadUrl, uploadViaSignedUrl } from "@/lib/imageUpload";
 import {
   getSparseOrder,
@@ -11,7 +17,6 @@ import {
   deleteImageWithStorage,
 } from "@/lib/imageManagerHelpers";
 import { UploadableImage } from "./productImages.types";
-import { TARGET_WIDTHS } from "@/lib/imagePaths";
 
 export type ExistingImage = {
   id: string;
@@ -30,7 +35,7 @@ export type ProcessedImageInfo = {
 export type UploadStatus = "idle" | "uploading" | "processing" | "success" | "error";
 
 export function useProductImageManager(
-  slug: string,
+  productId: string,
   existingImages?: ExistingImage[],
   onProcessedChange?: (processed: ProcessedImageInfo[]) => void
 ) {
@@ -61,12 +66,12 @@ export function useProductImageManager(
     const sorted = [...existingImages].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
     const converted: UploadableImage[] = sorted.map((img, idx) => {
-      const originalPath = getOriginalPath(slug, img.basename, img.extension);
-      const previewPath = getPreviewPath(slug, img.basename, img.extension);
+      const originalPath = getOriginalPath(productId, img.basename, img.extension);
+      const previewPath = getPreviewPath(productId, img.basename, img.extension);
       const previewUrl = `https://${process.env.NEXT_PUBLIC_SUPABASE_URL!.replace(
         /^https?:\/\//,
         ""
-      )}/storage/v1/object/public/product-images/${previewPath}`;
+      )}/storage/v1/object/public/${BASE_BUCKET}/${previewPath}`;
       const dummyFile = new File([], `existing-${img.id}`, { type: "image/jpeg" });
 
       return {
@@ -74,7 +79,7 @@ export function useProductImageManager(
         status: "success",
         previewUrl,
         originalPath,
-        processedVariants: getResizedPaths(slug, img.basename, img.extension),
+        processedVariants: getResizedPaths(productId, img.basename, img.extension),
         id: `existing-${img.id}`,
         isExisting: true,
         basename: img.basename,
@@ -87,56 +92,65 @@ export function useProductImageManager(
     const balanced = rebalanceOrders(converted);
     setImages(balanced);
     notifyProcessedChange(balanced);
-  }, [existingImages, slug, notifyProcessedChange]);
+  }, [existingImages, productId, notifyProcessedChange]);
 
   /** Add new files — create local preview only */
-  const handleAddFiles = useCallback((files: File[]) => {
-    const valid = files.filter(
-      (f) => f.type.startsWith("image/") && !f.name.endsWith(".gif")
-    );
+  const handleAddFiles = useCallback(
+    (files: File[]) => {
+      const valid = files.filter(
+        (f) => f.type.startsWith("image/") && !f.name.endsWith(".gif")
+      );
 
-    const newImages: UploadableImage[] = valid.map((file, i) => ({
-      file,
-      status: "idle",
-      previewUrl: URL.createObjectURL(file),
-      id: `local-${Date.now()}-${i}`,
-      order: getSparseOrder(images.length + i),
-    }));
+      const newImages: UploadableImage[] = valid.map((file, i) => ({
+        file,
+        status: "idle",
+        previewUrl: URL.createObjectURL(file),
+        id: `local-${Date.now()}-${i}`,
+        order: getSparseOrder(images.length + i),
+      }));
 
-    setImages((prev) => rebalanceOrders([...prev, ...newImages]));
-  }, [images.length]);
+      setImages((prev) => rebalanceOrders([...prev, ...newImages]));
+    },
+    [images.length]
+  );
 
   /** Remove image (local or existing) */
-  const handleRemove = useCallback(async (index: number) => {
-    const img = images[index];
+  const handleRemove = useCallback(
+    async (index: number) => {
+      const img = images[index];
 
-    if (!img.isExisting && img.previewUrl?.startsWith("blob:")) {
-      URL.revokeObjectURL(img.previewUrl);
-    }
+      if (!img.isExisting && img.previewUrl?.startsWith("blob:")) {
+        URL.revokeObjectURL(img.previewUrl);
+      }
 
-    try {
-      await deleteImageWithStorage(img);
-    } catch {
-      // ignore deletion errors
-    }
+      try {
+        await deleteImageWithStorage(img);
+      } catch {
+        // ignore deletion errors
+      }
 
-    setImages((prev) => {
-      const balanced = rebalanceOrders(prev.filter((_, i) => i !== index));
-      notifyProcessedChange(balanced);
-      return balanced;
-    });
-  }, [images, notifyProcessedChange]);
+      setImages((prev) => {
+        const balanced = rebalanceOrders(prev.filter((_, i) => i !== index));
+        notifyProcessedChange(balanced);
+        return balanced;
+      });
+    },
+    [images, notifyProcessedChange]
+  );
 
   /** Retry upload immediately for one image */
-  const handleRetry = useCallback(async (index: number) => {
-    const img = images[index];
-    if (img.isExisting || img.status === "success") return;
+  const handleRetry = useCallback(
+    async (index: number) => {
+      const img = images[index];
+      if (img.isExisting || img.status === "success") return;
 
-    const resetImg: UploadableImage = { ...img, status: "idle", errorMessage: undefined };
+      const resetImg: UploadableImage = { ...img, status: "idle", errorMessage: undefined };
 
-    setImages((prev) => prev.map((curr, i) => (i === index ? resetImg : curr)));
-    await uploadSingle(index, resetImg.file);
-  }, [images]);
+      setImages((prev) => prev.map((curr, i) => (i === index ? resetImg : curr)));
+      await uploadSingle(index, resetImg.file);
+    },
+    [images]
+  );
 
   /** Reorder images with sparse order */
   const handleReorder = useCallback(
@@ -145,14 +159,12 @@ export function useProductImageManager(
       const [moved] = next.splice(from, 1); // remove moved image
       next.splice(to, 0, moved); // insert at new index
 
-      // Determine new sparse order for moved image
       const prev = next[to - 1]?.order ?? 0;
-      const nextOrder = next[to + 1]?.order ?? prev + 20; // some default gap if at end
+      const nextOrder = next[to + 1]?.order ?? prev + 20;
       const newOrder = prev + Math.floor((nextOrder - prev) / 2);
 
       moved.order = newOrder;
 
-      // Check if collision occurred
       const collision = next.some((img, idx) => {
         if (idx === 0) return false;
         return next[idx].order! <= next[idx - 1].order!;
@@ -169,91 +181,85 @@ export function useProductImageManager(
   );
 
   /** Upload and resize one image */
-  const uploadSingle = useCallback(async (
-    index: number,
-    file: File,
-    imageId?: string,
-    basename?: string
-  ) => {
-    const imgToProcess = images[index];
-    const fileExt = file.name.split(".").pop()!;
-    const fileNameBase = basename || `${Date.now()}_${file.name}`;
-    const originalPath = getOriginalPath(slug, fileNameBase);
-
-    setImages((prev) =>
-      prev.map((img, i) =>
-        i === index ? { ...img, status: "uploading", errorMessage: undefined } : img
-      )
-    );
-
-    try {
-      // Upload original
-      const { url: signedUrl } = await getSignedUploadUrl(originalPath);
-      await uploadViaSignedUrl(signedUrl, file, file.type);
+  const uploadSingle = useCallback(
+    async (index: number, file: File, imageId?: string, basename?: string) => {
+      const imgToProcess = images[index];
+      const fileExt = file.name.split(".").pop()!;
+      const fileNameBase = basename || `${Date.now()}_${file.name}`;
+      const originalPath = getOriginalPath(productId, fileNameBase);
 
       setImages((prev) =>
         prev.map((img, i) =>
-          i === index ? { ...img, status: "processing", originalPath } : img
+          i === index ? { ...img, status: "uploading", errorMessage: undefined } : img
         )
       );
 
-      // Resize and upload variants
-      const resizedBlobs = await resizeImage(file, TARGET_WIDTHS);
-      const resizedPaths = getResizedPaths(slug, fileNameBase, fileExt);
+      try {
+        const { url: signedUrl } = await getSignedUploadUrl(originalPath);
+        await uploadViaSignedUrl(signedUrl, file, file.type);
 
-      for (let i = 0; i < resizedPaths.length; i++) {
-        const { url: resizedUrl } = await getSignedUploadUrl(resizedPaths[i]);
-        await uploadViaSignedUrl(resizedUrl, resizedBlobs[i], file.type);
-      }
-
-      // Update to Supabase preview URL
-      const newPreviewUrl = `https://${process.env.NEXT_PUBLIC_SUPABASE_URL!.replace(
-        /^https?:\/\//,
-        ""
-      )}/storage/v1/object/public/product-images/${getPreviewPath(
-        slug,
-        fileNameBase,
-        fileExt
-      )}`;
-
-      setImages((prev) => {
-        const next = prev.map((img, i) =>
-          i === index
-            ? {
-              ...img,
-              status: "success" as UploadStatus,
-              processedVariants: resizedPaths,
-              basename: fileNameBase,
-              extension: fileExt,
-              imageId,
-              previewUrl: newPreviewUrl,
-            }
-            : img
+        setImages((prev) =>
+          prev.map((img, i) =>
+            i === index ? { ...img, status: "processing", originalPath } : img
+          )
         );
-        notifyProcessedChange(next);
-        return next;
-      });
 
-    } catch (err: any) {
-      console.error("Upload error:", err);
+        const resizedBlobs = await resizeImage(file, TARGET_WIDTHS);
+        const resizedPaths = getResizedPaths(productId, fileNameBase, fileExt);
 
-      if (imageId) {
-        try {
-          await deleteImageWithStorage({ ...imgToProcess, imageId });
-        } catch (deleteErr) {
-          console.error("Rollback deletion failed:", deleteErr);
+        for (let i = 0; i < resizedPaths.length; i++) {
+          const { url: resizedUrl } = await getSignedUploadUrl(resizedPaths[i]);
+          await uploadViaSignedUrl(resizedUrl, resizedBlobs[i], file.type);
         }
+
+        const newPreviewUrl = `https://${process.env.NEXT_PUBLIC_SUPABASE_URL!.replace(
+          /^https?:\/\//,
+          ""
+        )}/storage/v1/object/public/${BASE_BUCKET}/${getPreviewPath(
+          productId,
+          fileNameBase,
+          fileExt
+        )}`;
+
+        setImages((prev) => {
+          const next = prev.map((img, i) =>
+            i === index
+              ? {
+                  ...img,
+                  status: "success" as UploadStatus,
+                  processedVariants: resizedPaths,
+                  basename: fileNameBase,
+                  extension: fileExt,
+                  imageId,
+                  previewUrl: newPreviewUrl,
+                }
+              : img
+          );
+          notifyProcessedChange(next);
+          return next;
+        });
+      } catch (err: any) {
+        console.error("Upload error:", err);
+
+        if (imageId) {
+          try {
+            await deleteImageWithStorage({ ...imgToProcess, imageId });
+          } catch (deleteErr) {
+            console.error("Rollback deletion failed:", deleteErr);
+          }
+        }
+
+        setImages((prev) =>
+          prev.map((img, i) =>
+            i === index ? { ...img, status: "error", errorMessage: err.message } : img
+          )
+        );
       }
+    },
+    [images, productId, notifyProcessedChange]
+  );
 
-      setImages((prev) =>
-        prev.map((img, i) =>
-          i === index ? { ...img, status: "error", errorMessage: err.message } : img
-        )
-      );
-    }
-  }, [images, slug, notifyProcessedChange]);
-
-  /** Upload all pending images — call from form submit */
+  /** Upload all pending images */
   const handleUploadAll = useCallback(async (): Promise<void> => {
     if (uploadingRef.current) return;
     uploadingRef.current = true;
@@ -263,7 +269,7 @@ export function useProductImageManager(
       if (img.isExisting || img.status === "success") continue;
 
       try {
-        const dbRow = await createImageDbRow(img.file, slug, img.order);
+        const dbRow = await createImageDbRow(img.file, productId, img.order);
         await uploadSingle(i, img.file, dbRow.id, dbRow.basename);
       } catch (err) {
         console.error("Failed to upload image:", err);
@@ -271,9 +277,9 @@ export function useProductImageManager(
     }
 
     uploadingRef.current = false;
-  }, [images, slug, uploadSingle]);
+  }, [images, productId, uploadSingle]);
 
-  /** Cleanup object URLs on unmount */
+  /** Cleanup */
   useEffect(() => {
     return () => {
       images.forEach((img) => {

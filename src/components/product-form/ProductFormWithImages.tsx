@@ -13,7 +13,7 @@ import { toast } from "sonner";
 type Props = {
   mode: "create" | "edit";
   initialValues?: InitialValues;
-  slug?: string;
+  productId?: string;
   existingImages?: ExistingImage[];
   formAction: (formData: FormData) => Promise<void>;
 };
@@ -21,7 +21,7 @@ type Props = {
 export default function ProductFormWithImages({
   mode,
   initialValues,
-  slug,
+  productId,
   existingImages,
   formAction,
 }: Props) {
@@ -31,18 +31,9 @@ export default function ProductFormWithImages({
   const formRef = useRef<ProductFormHandle>(null);
   const imagesRef = useRef<ProductImagesHandle>(null);
 
-  // callback from ProductImages when order changes
   const handleOrderChange = useCallback((ordered: ProcessedImageInfo[]) => {
     setOrderedImages(ordered);
   }, []);
-
-  // Determine slug for images (new or edit)
-  const imagesSlug =
-    mode === "create"
-      ? productName
-        ? productName.toLowerCase().replace(/\s+/g, "-")
-        : "new-product"
-      : slug ?? "unknown-product";
 
   const handleSave = async () => {
     if (!formRef.current) return;
@@ -65,14 +56,14 @@ export default function ProductFormWithImages({
       }
     }
 
-    // Persist image order
-    if (orderedImages.length > 0) {
+    // Persist image order to DB
+    if (productId && orderedImages.length > 0) {
       try {
         const res = await fetch("/api/images/reorder", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            slug: slug ?? productName.toLowerCase().replace(/\s+/g, "-"),
+            productId,
             orderedImages: orderedImages.map((img) => ({
               id: img.id,
               order: img.order,
@@ -125,12 +116,14 @@ export default function ProductFormWithImages({
           action={formAction}
         />
 
-        <ProductImages
-          ref={imagesRef}
-          slug={imagesSlug}
-          existingImages={existingImages}
-          onOrderChange={handleOrderChange} // listen for reorder events
-        />
+        {productId && (
+          <ProductImages
+            ref={imagesRef}
+            productId={productId}
+            existingImages={existingImages}
+            onOrderChange={handleOrderChange}
+          />
+        )}
       </div>
     </div>
   );
