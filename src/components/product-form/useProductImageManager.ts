@@ -35,7 +35,7 @@ export type ProcessedImageInfo = {
 export type UploadStatus = "idle" | "uploading" | "processing" | "success" | "error";
 
 export function useProductImageManager(
-  productId: string,
+  productId?: string,
   existingImages?: ExistingImage[],
   onProcessedChange?: (processed: ProcessedImageInfo[]) => void
 ) {
@@ -61,7 +61,7 @@ export function useProductImageManager(
 
   /** Initialize existing images sorted by order */
   useEffect(() => {
-    if (!existingImages?.length) return;
+    if (!existingImages?.length || !productId) return;
 
     const sorted = [...existingImages].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
@@ -125,8 +125,8 @@ export function useProductImageManager(
 
       try {
         await deleteImageWithStorage(img);
-      } catch {
-        // ignore deletion errors
+      } catch (err) {
+        console.warn("Storage deletion failed (safe to ignore in create mode):", err);
       }
 
       setImages((prev) => {
@@ -141,6 +141,11 @@ export function useProductImageManager(
   /** Retry upload immediately for one image */
   const handleRetry = useCallback(
     async (index: number) => {
+      if (!productId) {
+        console.warn("Cannot retry upload — productId is not yet available.");
+        return;
+      }
+
       const img = images[index];
       if (img.isExisting || img.status === "success") return;
 
@@ -149,44 +154,33 @@ export function useProductImageManager(
       setImages((prev) => prev.map((curr, i) => (i === index ? resetImg : curr)));
       await uploadSingle(index, resetImg.file);
     },
-    [images]
+    [images, productId]
   );
 
   /** Reorder images with sparse order */
   const handleReorder = useCallback(
     (from: number, to: number): UploadableImage[] => {
-      const next = [...images];
-      const [moved] = next.splice(from, 1); // remove moved image
-      next.splice(to, 0, moved); // insert at new index
-
-      const prev = next[to - 1]?.order ?? 0;
-      const nextOrder = next[to + 1]?.order ?? prev + 20;
-      const newOrder = prev + Math.floor((nextOrder - prev) / 2);
-
-      moved.order = newOrder;
-
-      const collision = next.some((img, idx) => {
-        if (idx === 0) return false;
-        return next[idx].order! <= next[idx - 1].order!;
-      });
-
-      const balanced = collision ? rebalanceOrders(next) : next;
-
+      const next = arrayMoveImmutable(images, from, to);
+      const balanced = rebalanceOrders(next);
       setImages(balanced);
       notifyProcessedChange(balanced);
-
       return balanced;
     },
     [images, notifyProcessedChange]
   );
 
-  /** Upload and resize one image */
+  /** Upload and resize one image (requires productId) */
   const uploadSingle = useCallback(
     async (index: number, file: File, imageId?: string, basename?: string) => {
+      if (!productId) {
+        console.warn("Skipping upload — productId not yet available.");
+        return;
+      }
+
       const imgToProcess = images[index];
       const fileExt = file.name.split(".").pop()!;
       const fileNameBase = basename || `${Date.now()}_${file.name}`;
-      const originalPath = getOriginalPath(productId, fileNameBase);
+      const originalPath = getOriginalPath(productId, fileNameBase, fileExt);
 
       setImages((prev) =>
         prev.map((img, i) =>
@@ -259,8 +253,13 @@ export function useProductImageManager(
     [images, productId, notifyProcessedChange]
   );
 
-  /** Upload all pending images */
+  /** Upload all pending images — only after productId exists */
   const handleUploadAll = useCallback(async (): Promise<void> => {
+    if (!productId) {
+      console.warn("Skipping uploadAll — productId not yet available.");
+      return;
+    }
+
     if (uploadingRef.current) return;
     uploadingRef.current = true;
 

@@ -1,19 +1,8 @@
 export const BASE_BUCKET = "product-images"; // Supabase storage bucket
 export const TARGET_WIDTHS = [720, 900, 1080, 1296, 1512, 1728, 2048];
 
-/**
- * Generate path for the original uploaded image.
- * Examples:
- *   getOriginalPath("123", "abc", "jpg") → "123/original/abc.jpg"
- *   getOriginalPath("123", "abc.jpg")   → "123/original/abc.jpg"
- */
-export function getOriginalPath(productId: string, basename: string, ext: string): string;
-export function getOriginalPath(productId: string, filename: string): string;
-export function getOriginalPath(productId: string, namePart: string, ext?: string): string {
-  if (ext !== undefined) {
-    return `${productId}/original/${namePart}.${ext}`;
-  }
-  return `${productId}/original/${namePart}`;
+export function getOriginalPath(productId: string, basename: string, ext: string): string {
+  return `${productId}/original/${basename}.${ext}`;
 }
 
 /**

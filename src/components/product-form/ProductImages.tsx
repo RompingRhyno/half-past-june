@@ -26,7 +26,7 @@ export type ExistingImage = {
 };
 
 type ProductImagesProps = {
-  productId: string;
+  productId?: string;
   existingImages?: ExistingImage[];
   onProcessedChange?: (processed: ProcessedImageInfo[]) => void;
   onOrderChange?: (orderedImages: ProcessedImageInfo[]) => void;

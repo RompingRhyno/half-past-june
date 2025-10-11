@@ -16,41 +16,41 @@ datasource db {
 }
 
 model Product {
-  id           String           @id @default(cuid())
-  name         String
-  slug         String           @unique
-  description  String?
-  makeToOrder  Boolean          @default(true)    // determines stock model
-  images       Image[]
-  variants     ProductVariant[]
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
+  id          String           @id @default(cuid())
+  name        String
+  slug        String           @unique
+  description String?
+  makeToOrder Boolean          @default(true)
+  images      Image[]
+  variants    ProductVariant[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
 }
 
 model ProductVariant {
-  id          String         @id @default(cuid())
-  colour      String
-  colourCode  String?        // HEX or RGB color string
-  price       Float
-  stock       Int?           // null if stock is per-size
-  product     Product        @relation(fields: [productId], references: [id])
-  productId   String
-  sizes       VariantSize[]
+  id         String        @id @default(cuid())
+  colour     String
+  colourCode String?
+  price      Float
+  stock      Int?
+  product    Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId  String
+  sizes      VariantSize[]
 }
 
 model VariantSize {
-  id             String           @id @default(cuid())
-  size           String           // e.g., "S", "M", "L"
-  stock          Int?             // specific stock per size
-  productVariant ProductVariant   @relation(fields: [variantId], references: [id])
+  id             String         @id @default(cuid())
+  size           String
+  stock          Int?
+  productVariant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
   variantId      String
 }
 
 model Image {
-  id         String   @id @default(cuid())
-  basename   String   // e.g., "1721851217640_MyPhoto"
-  extension  String   // e.g., "jpg"
-  order      Int      @default(0)
-  product    Product  @relation(fields: [productId], references: [id])
-  productId  String
+  id        String  @id @default(cuid())
+  basename  String
+  extension String
+  order     Int     @default(0)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId String
 }
