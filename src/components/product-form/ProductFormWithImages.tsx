@@ -62,10 +62,16 @@ export default function ProductFormWithImages({
 
             // 4. Upload all pending images
             await imagesRef.current.uploadAll?.(currentProductId);
-            
+
             // 5. Get successfully processed images
             const uploadedImages: ProcessedImageInfo[] =
                 imagesRef.current.getProcessedImages?.() ?? [];
+
+                // Debug log
+            console.log("Reorder payload:", {
+                productId: currentProductId,
+                orderedImages: uploadedImages.map(({ id, order }) => ({ id, order })),
+            });
 
             // 6. Reorder images on server if any were uploaded
             if (uploadedImages.length > 0) {

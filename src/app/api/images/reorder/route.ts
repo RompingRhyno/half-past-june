@@ -3,9 +3,15 @@ import { prisma } from "@/lib/prisma";
 
 export async function POST(req: Request) {
   try {
-    const { slug, orderedImages }: { slug: string; orderedImages: { id: string; order: number }[] } = await req.json();
+    const {
+      productId,
+      orderedImages,
+    }: {
+      productId: string;
+      orderedImages: { id: string; order: number }[];
+    } = await req.json();
 
-    if (!slug || !orderedImages) {
+    if (!productId || !orderedImages?.length) {
       return NextResponse.json({ error: "Missing parameters" }, { status: 400 });
     }
 
@@ -17,7 +23,6 @@ export async function POST(req: Request) {
       })
     );
 
-    // Wait for all updates to complete
     await Promise.all(updates);
 
     return NextResponse.json({ success: true });
