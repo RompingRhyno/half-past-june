@@ -1,7 +1,7 @@
 export type UploadStatus = "idle" | "uploading" | "processing" | "success" | "error";
 
 export type UploadableImage = {
-  file: File;
+  file?: File | null;
   status: UploadStatus;
   previewUrl: string;
   originalPath?: string;
@@ -20,4 +20,11 @@ export type ProcessedImageInfo = {
   extension: string;
   order: number;
   id?: string;
+};
+
+export type ExistingImage = {
+  id: string;
+  basename: string;
+  extension: string;
+  order?: number;
 };

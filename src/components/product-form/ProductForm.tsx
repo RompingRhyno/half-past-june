@@ -19,15 +19,18 @@ export type InitialValues = {
 };
 
 type Props = {
-  action: (formData: FormData) => Promise<void>;
+  action: (formData: FormData) => Promise<SubmitResult>;
   mode: "create" | "edit";
   initialValues?: InitialValues;
   onNameChange?: (name: string) => void; // callback to update floating header
 };
 
 export type ProductFormHandle = {
-  submitForm: () => Promise<string | null>; // return error message or null
+  submitForm: () => Promise<SubmitResult | null>;
 };
+
+export type SubmitResult = { success: boolean; error?: string; productId?: string };
+
 
 const ProductForm = forwardRef<ProductFormHandle, Props>(
   ({ action, mode, initialValues, onNameChange }, ref) => {
@@ -98,9 +101,9 @@ const ProductForm = forwardRef<ProductFormHandle, Props>(
       return null;
     };
 
-    const submitForm = async (): Promise<string | null> => {
+    const submitForm = async (): Promise<SubmitResult | null> => {
       const validationError = validateForm();
-      if (validationError) return validationError;
+      if (validationError) return { success: false, error: validationError };
 
       setIsSubmitting(true);
 
@@ -131,14 +134,15 @@ const ProductForm = forwardRef<ProductFormHandle, Props>(
             }))
           )
         );
-        formData.append("images", "[]"); // Placeholder
+        formData.append("images", "[]"); // Placeholder for now
 
-        await action(formData);
-        return null; // success
+        // Call server action and get the real productId
+        const result = await action(formData);
+        return result; // <-- propagate productId and success status
       } catch (error: any) {
         if (error?.digest?.startsWith("NEXT_REDIRECT")) return null;
         console.error("Form submission error:", error);
-        return "An unexpected error occurred";
+        return { success: false, error: "An unexpected error occurred" };
       } finally {
         setIsSubmitting(false);
       }
@@ -184,14 +188,12 @@ const ProductForm = forwardRef<ProductFormHandle, Props>(
           <button
             type="button"
             onClick={() => setMakeToOrder((prev) => !prev)}
-            className={`w-12 h-6 flex items-center rounded-full p-1 transition-colors duration-300 ${
-              makeToOrder ? "bg-green-500" : "bg-gray-300"
-            }`}
+            className={`w-12 h-6 flex items-center rounded-full p-1 transition-colors duration-300 ${makeToOrder ? "bg-green-500" : "bg-gray-300"
+              }`}
           >
             <div
-              className={`bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ease-in-out ${
-                makeToOrder ? "translate-x-6" : "translate-x-0"
-              }`}
+              className={`bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ease-in-out ${makeToOrder ? "translate-x-6" : "translate-x-0"
+                }`}
             />
           </button>
         </div>

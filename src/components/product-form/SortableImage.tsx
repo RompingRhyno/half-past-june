@@ -10,7 +10,7 @@ type SortableImageProps = {
   image: UploadableImage;
   index: number;
   onRemove: (index: number) => void;
-  onRetry: (index: number) => void;
+  onRetry?: (index: number) => void;
 };
 
 export default function SortableImage({
@@ -61,7 +61,7 @@ export default function SortableImage({
         )}
 
         {/* Error overlay */}
-        {image.status === "error" && !image.isExisting && (
+        {image.status === "error" && !image.isExisting && onRetry && (
           <div className="absolute inset-0 flex flex-col items-center justify-end p-1 z-20">
             {image.errorMessage && (
               <div className="text-xs text-white bg-red-500 p-1 rounded max-w-full truncate mb-1 shadow">

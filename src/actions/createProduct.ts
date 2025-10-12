@@ -1,7 +1,6 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { redirect } from "next/navigation";
 
 interface ProductVariant {
   colour: string;
@@ -23,7 +22,10 @@ interface CreateProductInput {
   images?: Array<{ basename: string; extension: string }>;
 }
 
-// Product creation logic
+/**
+ * Creates a new product in the database.
+ * Returns both the product's `id` and `slug`.
+ */
 export async function createProduct(data: CreateProductInput) {
   try {
     const product = await prisma.product.create({
@@ -33,53 +35,58 @@ export async function createProduct(data: CreateProductInput) {
         description: data.description,
         makeToOrder: data.makeToOrder ?? true,
         images: {
-          create: data.images?.map(img => ({
-            basename: img.basename,
-            extension: img.extension,
-          })) || [],
+          create:
+            data.images?.map((img) => ({
+              basename: img.basename,
+              extension: img.extension,
+            })) || [],
         },
         variants: {
-          create: data.variants.map(variant => ({
+          create: data.variants.map((variant) => ({
             colour: variant.colour,
             colourCode: variant.colourCode,
             price: Number(variant.price),
             stock: variant.sizes?.length ? null : Number(variant.stock || 0),
             sizes: {
-              create: variant.sizes?.map(size => ({
-                size: size.size,
-                stock: data.makeToOrder ? null : Number(size.stock || 0),
-              })) || [],
+              create:
+                variant.sizes?.map((size) => ({
+                  size: size.size,
+                  stock: data.makeToOrder ? null : Number(size.stock || 0),
+                })) || [],
             },
           })),
         },
       },
-      select: { slug: true },
+      select: { id: true, slug: true },
     });
 
-    return product.slug;
-
+    return product;
   } catch (error) {
     console.error("Product creation failed:", error);
     throw new Error(
-      error instanceof Error
-        ? error.message
-        : "Failed to create product"
+      error instanceof Error ? error.message : "Failed to create product"
     );
   }
 }
 
-// Server action for form submission
+/**
+ * Handles form submission for product creation.
+ * Returns `{ productId, slug }` so the client can continue the upload flow.
+ */
 export async function createProductAction(formData: FormData) {
-  const slug = formData.get("slug") as string;
+  try {
+    const product = await createProduct({
+      name: formData.get("name") as string,
+      slug: formData.get("slug") as string,
+      description: formData.get("description") as string,
+      makeToOrder: formData.get("makeToOrder") === "true",
+      variants: JSON.parse(formData.get("variants") as string),
+      images: JSON.parse(formData.get("images") as string),
+    });
 
-  await createProduct({
-    name: formData.get("name") as string,
-    slug,
-    description: formData.get("description") as string,
-    makeToOrder: formData.get("makeToOrder") === "true",
-    variants: JSON.parse(formData.get("variants") as string),
-    images: JSON.parse(formData.get("images") as string),
-  });
-
-  redirect(`/admin/products/${slug}/edit`);
+    return { success: true, productId: product.id, slug: product.slug };
+  } catch (error) {
+    console.error("createProductAction failed:", error);
+    return { success: false, error: "Failed to create product" };
+  }
 }

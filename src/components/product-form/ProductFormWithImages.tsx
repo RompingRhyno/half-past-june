@@ -2,12 +2,9 @@
 
 import { useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import ProductForm, { InitialValues, ProductFormHandle } from "./ProductForm";
-import ProductImages, {
-    ProductImagesHandle,
-    ExistingImage,
-} from "./ProductImages";
-import { ProcessedImageInfo } from "./productImages.types";
+import ProductForm, { InitialValues, ProductFormHandle, SubmitResult } from "./ProductForm";
+import ProductImages, { ProductImagesHandle } from "./ProductImages";
+import { ProcessedImageInfo, ExistingImage } from "./productImages.types";
 import { toast } from "sonner";
 import { deleteProduct } from "@/actions/deleteProduct";
 
@@ -16,7 +13,7 @@ type Props = {
     initialValues?: InitialValues;
     productId?: string;
     existingImages?: ExistingImage[];
-    formAction: (formData: FormData) => Promise<void>;
+    formAction: (formData: FormData) => Promise<SubmitResult>;
 };
 
 export default function ProductFormWithImages({
@@ -27,63 +24,74 @@ export default function ProductFormWithImages({
     formAction,
 }: Props) {
     const router = useRouter();
+
     const [productName, setProductName] = useState(initialValues?.name ?? "");
-    const [orderedImages, setOrderedImages] = useState<ProcessedImageInfo[]>([]);
+    const [realProductId, setRealProductId] = useState<string | null>(
+        mode === "edit" ? productId ?? null : null
+    );
     const [deleting, setDeleting] = useState(false);
     const [showConfirm, setShowConfirm] = useState(false);
+    const [processing, setProcessing] = useState(false);
 
     const formRef = useRef<ProductFormHandle>(null);
     const imagesRef = useRef<ProductImagesHandle>(null);
 
-    const handleOrderChange = useCallback((ordered: ProcessedImageInfo[]) => {
-        setOrderedImages(ordered);
-    }, []);
+    const handleSave = useCallback(async () => {
+        if (processing) return;
+        if (!formRef.current || !imagesRef.current) return;
 
-    const handleSave = async () => {
-        if (!formRef.current) return;
-
-        const formError = await formRef.current.submitForm();
-        if (formError) {
-            toast.error(formError);
-            return;
-        }
-
-        if (imagesRef.current) {
-            try {
-                await imagesRef.current.uploadAll();
-            } catch (err) {
-                console.error("Image upload failed:", err);
-                toast.error("Failed to upload images.");
+        setProcessing(true);
+        try {
+            // 1. Submit the product form
+            const result = await formRef.current.submitForm();
+            if (!result?.success) {
+                toast.error(result?.error ?? "Failed to save product.");
                 return;
             }
-        }
 
-        if (productId && orderedImages.length > 0) {
-            try {
+            // 2. Ensure we have a product ID
+            const currentProductId = result.productId || realProductId;
+            if (!currentProductId) {
+                toast.error("No product ID returned from server.");
+                return;
+            }
+
+            // 3. Update state and notify ProductImages hook
+            setRealProductId(currentProductId);
+            imagesRef.current.updateProductId?.(currentProductId);
+
+            // 4. Upload all pending images
+            await imagesRef.current.uploadAll?.(currentProductId);
+            
+            // 5. Get successfully processed images
+            const uploadedImages: ProcessedImageInfo[] =
+                imagesRef.current.getProcessedImages?.() ?? [];
+
+            // 6. Reorder images on server if any were uploaded
+            if (uploadedImages.length > 0) {
                 const res = await fetch("/api/images/reorder", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
-                        productId,
-                        orderedImages: orderedImages.map((img) => ({
-                            id: img.id,
-                            order: img.order,
-                        })),
+                        productId: currentProductId,
+                        orderedImages: uploadedImages.map(({ id, order }) => ({ id, order })),
                     }),
                 });
                 if (!res.ok) throw new Error("Failed to reorder images");
-            } catch (err) {
-                console.error("Image reorder failed:", err);
-                toast.error("Failed to save image order.");
-                return;
             }
+
+            toast.success(mode === "create" ? "Product created successfully!" : "Changes saved!");
+            router.push("/admin/products");
+        } catch (err) {
+            console.error("handleSave error:", err);
+            toast.error("Failed to save product or images.");
+        } finally {
+            setProcessing(false);
         }
+    }, [realProductId, mode, processing, router]);
 
-        toast.success(mode === "create" ? "Product created successfully!" : "Changes saved!");
-        router.push("/admin/products");
-    };
 
-    const handleDelete = async () => {
+    const handleDelete = useCallback(async () => {
         if (!productId) return;
         setShowConfirm(false);
         setDeleting(true);
@@ -98,7 +106,7 @@ export default function ProductFormWithImages({
         } finally {
             setDeleting(false);
         }
-    };
+    }, [productId, productName, router]);
 
     return (
         <div>
@@ -127,18 +135,22 @@ export default function ProductFormWithImages({
                         type="button"
                         className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700"
                         onClick={handleSave}
+                        disabled={processing}
                     >
-                        Save
+                        {processing ? "Saving..." : "Save"}
                     </button>
                 </div>
             </div>
 
-            {/* Confirmation modal */}
+            {/* Delete confirmation */}
             {showConfirm && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
                     <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-6 space-y-4">
                         <h3 className="text-lg font-bold">Delete Product</h3>
-                        <p>Are you sure you want to delete "{productName}"? This action cannot be undone.</p>
+                        <p>
+                            Are you sure you want to delete "{productName}"? This action cannot
+                            be undone.
+                        </p>
                         <div className="flex justify-end gap-2 mt-4">
                             <button
                                 className="px-4 py-2 rounded border hover:bg-gray-100"
@@ -159,6 +171,7 @@ export default function ProductFormWithImages({
                 </div>
             )}
 
+            {/* Product form + images */}
             <div className="pt-20 space-y-6 max-w-4xl mx-auto p-6">
                 <ProductForm
                     ref={formRef}
@@ -167,15 +180,11 @@ export default function ProductFormWithImages({
                     onNameChange={setProductName}
                     action={formAction}
                 />
-
-
                 <ProductImages
                     ref={imagesRef}
-                    productId={productId}
+                    productId={realProductId}
                     existingImages={existingImages}
-                    onOrderChange={handleOrderChange}
                 />
-
             </div>
         </div>
     );
