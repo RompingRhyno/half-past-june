@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
   output   = "../src/generated/prisma"
@@ -18,23 +12,23 @@ datasource db {
 model Product {
   id          String           @id @default(cuid())
   name        String
-  slug        String           @unique
-  description String?
-  makeToOrder Boolean          @default(true)
-  images      Image[]
-  variants    ProductVariant[]
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
+  description String?
+  makeToOrder Boolean          @default(true)
+  slug        String           @unique
+  images      Image[]
+  variants    ProductVariant[]
 }
 
 model ProductVariant {
   id         String        @id @default(cuid())
+  stock      Int?
+  productId  String
   colour     String
   colourCode String?
   price      Float
-  stock      Int?
   product    Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
-  productId  String
   sizes      VariantSize[]
 }
 
@@ -42,15 +36,15 @@ model VariantSize {
   id             String         @id @default(cuid())
   size           String
   stock          Int?
-  productVariant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
   variantId      String
+  productVariant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
 }
 
 model Image {
   id        String  @id @default(cuid())
+  productId String
   basename  String
   extension String
   order     Int     @default(0)
   product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  productId String
 }
