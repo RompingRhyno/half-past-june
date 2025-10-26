@@ -44,7 +44,7 @@ export default function ProductCard({ product, onClick }: ProductCardProps) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
-  // Prefetch remaining images after top 3 (collapsed)
+  // Prefetch remaining collapsed images
   useEffect(() => {
     remainingImages.forEach((img, i) => {
       const { src } = getImageSrcSet(product.id, img.basename, img.extension);
@@ -52,10 +52,9 @@ export default function ProductCard({ product, onClick }: ProductCardProps) {
     });
   }, [remainingImages, product.id]);
 
-  // Prefetch expanded view images
+  // Prefetch full gallery when expanded
   useEffect(() => {
     if (!expanded) return;
-
     const activeImg = sortedImages[activeIndex];
     const { src: activeSrc } = getImageSrcSet(product.id, activeImg.basename, activeImg.extension);
     prefetchScheduler.enqueue(activeSrc);
@@ -85,7 +84,7 @@ export default function ProductCard({ product, onClick }: ProductCardProps) {
       className="w-full bg-white shadow rounded-2xl overflow-hidden cursor-pointer"
       onClick={onClick ? () => onClick(product.slug) : handleCardClick}
     >
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {!expanded ? (
           // Collapsed layout
           <motion.div layout className="grid grid-cols-3 gap-2 p-2">
@@ -109,58 +108,58 @@ export default function ProductCard({ product, onClick }: ProductCardProps) {
                 </div>
               );
             })}
-
-            {topImages.length < 3 && (
-              <div className="col-span-1 flex items-center justify-center p-4">
-                <p className="text-gray-700 text-sm line-clamp-3">
-                  {product.description} <span className="text-blue-600">...see more</span>
-                </p>
-              </div>
-            )}
           </motion.div>
         ) : (
           // Expanded layout
           <motion.div layout className="flex flex-col md:flex-row">
             {/* Left: image + gallery */}
             <div className="flex-1 flex flex-col bg-black">
-              {/* First image with fixed height */}
-              <div
-                className="relative w-full"
-                style={{ height: "0", paddingBottom: "100%" }} // maintain collapsed square height
-              >
+              {/* Fixed-height main image */}
+              <motion.div layout className="relative w-full" style={{ height: 0, paddingBottom: "100%" }}>
                 <img
                   src={getImageSrcSet(product.id, sortedImages[activeIndex].basename, sortedImages[activeIndex].extension).src}
                   alt={`${product.name} image ${activeIndex + 1}`}
                   className="object-contain w-full h-full absolute top-0 left-0"
                   loading="lazy"
                 />
-              </div>
+              </motion.div>
 
-              {/* Gallery thumbnails below */}
-              <div className="flex gap-2 p-2 overflow-x-auto mt-2">
-                {sortedImages.map((img, i) => {
-                  const { src } = getImageSrcSet(product.id, img.basename, img.extension);
-                  return (
-                    <button
-                      key={i}
-                      className={`w-16 h-16 relative border-2 ${i === activeIndex ? "border-blue-500" : "border-transparent"}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleGalleryClick(i);
-                      }}
-                    >
-                      <Image src={src} alt="thumb" fill className="object-cover rounded" />
-                    </button>
-                  );
-                })}
-              </div>
+              {/* Delayed fade/slide-in gallery */}
+              <AnimatePresence>
+                <motion.div
+                  key="gallery"
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.35, delay: 0.15 }}
+                  className="flex gap-2 p-2 overflow-x-auto mt-2"
+                >
+                  {sortedImages.map((img, i) => {
+                    const { src } = getImageSrcSet(product.id, img.basename, img.extension);
+                    return (
+                      <button
+                        key={i}
+                        className={`w-16 h-16 relative border-2 ${
+                          i === activeIndex ? "border-blue-500" : "border-transparent"
+                        }`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleGalleryClick(i);
+                        }}
+                      >
+                        <Image src={src} alt="thumb" fill className="object-cover rounded" />
+                      </button>
+                    );
+                  })}
+                </motion.div>
+              </AnimatePresence>
             </div>
 
             {/* Right: description */}
-            <div className="flex-1 overflow-y-auto p-6">
+            <motion.div layout className="flex-1 overflow-y-auto p-6">
               <h2 className="text-2xl font-bold mb-4">{product.name}</h2>
               <p className="text-gray-700 whitespace-pre-line">{product.description}</p>
-            </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
